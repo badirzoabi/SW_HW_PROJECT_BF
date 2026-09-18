@@ -1,0 +1,144 @@
+================================================================================
+report_nbody.txt
+HW/SW Co-design Final Project (00460882) - Benchmark: nbody (pyperformance)
+================================================================================
+
+1. OVERVIEW
+--------------------------------------------------------------------------------
+nbody is the pyperformance benchmark that simulates the gravitational
+interaction of the Sun and four gas giants (Jupiter, Saturn, Uranus, Neptune)
+using a symplectic-Euler integrator, ported from the "n-body" language
+benchmark. It repeatedly:
+  1. computes pairwise gravitational forces between all C(5,2)=10 body pairs
+     and updates each body's velocity, then
+  2. advances each body's position using its velocity,
+for 20,000 iterations per benchmark loop.
+
+Libraries used: none beyond the Python standard library (`math.sqrt`) and the
+`pyperf` benchmarking harness. Data structures: each body is a Python list
+`[position_list, velocity_list, mass]`, where position/velocity are 3-element
+Python lists (so they can be mutated in place: `v1[0] -= ...`). The pairs to
+interact are precomputed once into a Python list of tuples
+(`PAIRS = combinations(SYSTEM)`).
+
+Algorithm: brute-force O(N^2) pairwise force accumulation (N=5, so 10 pairs
+per step) with a symplectic-Euler (leapfrog-style) position update. This is
+the textbook direct-summation n-body method - no tree/multipole approximation
+since N is tiny.
+
+2. INITIAL ANALYSIS
+--------------------------------------------------------------------------------
+Environment: QEMU/KVM guest (course "jammy" Ubuntu 22.04 image), profiled with
+`perf record -F 999 -g` on the `python3-dbg` (debug) build, per the course
+perf+pyperformance guide, and visualized with Brendan Gregg's FlameGraph tool.
+(Guest ran under software emulation - no nested-KVM access on this course
+account - so absolute times are inflated vs. bare metal, but the *relative*
+before/after comparison, which is what matters for this report, is unaffected
+since both runs use the same guest.)
+
+pyperformance official baseline (bench --bench nbody): 3.93 sec +- 0.70 sec.
+Standalone pyperf baseline (nbody_original.py): 3.93 sec +- 0.38 sec.
+
+perf report top hotspots (see results/perf_report_nbody_raw.txt for the full
+dump; results/nbody_orig.svg is the flame graph):
+
+    35.0%  _PyEval_EvalFrameDefault          <- raw bytecode dispatch/interp loop
+    29.3%  (bucket, resolves to:)
+             4.96%  binary_op1                <- generic binary-op dispatch
+             2.87%  _Py_CheckSlotResult
+             2.46%  PyFloat_FromDouble         <- boxing a new float object
+             2.33%  float_mul
+             2.03%  list_ass_subscript         <- v1[0] -= ... / v1[1] -= ...
+             1.84%  PyNumber_AsSsize_t         <- list index resolution
+             1.54%  float_add
+             1.53%  float_sub
+
+Reading this together: roughly 2/3 of the time is generic CPython interpreter
+overhead (bytecode dispatch, PyObject boxing/unboxing, binary-op dispatch) and
+list-subscript indexing (`list_ass_subscript` / `PyNumber_AsSsize_t`), not the
+floating-point arithmetic itself (float_mul/add/sub are individually only ~1.5-
+2.3% each). The inner loop's structure - reading/writing through `v1[0]`,
+`v1[1]`, `v1[2]` list subscripts and re-unpacking a nested tuple-of-lists on
+every one of the 10*20000 = 200,000 pair-iterations per benchmark loop - is
+paying interpreter+indexing tax on every scalar access.
+
+3. OPTIMIZATIONS
+--------------------------------------------------------------------------------
+First hypothesis (measured, then rejected): the inner loop uses a general
+power operator, `(dx*dx+dy*dy+dz*dz) ** (-1.5)`, which looks like an obvious
+"replace with hardware sqrt" target (`dt / (d2 * sqrt(d2))`). This was
+implemented and measured first - it produced ~0-1.5% difference, i.e.
+essentially no real gain on modern CPython. This matches the profile above:
+individual float ops (float_mul/add/sub, and by extension `**`) are each only
+a couple of percent; the bottleneck is not the FPU.
+
+Actual optimization applied (nbody/nbody_optimized.py): since nbody has a
+FIXED, TINY working set (5 bodies, 10 pairs), the force loop is specialized at
+import time (function `_build_advance`) into STRAIGHT-LINE CODE over LOCAL
+SCALARS (`x0,y0,z0,vx0,vy0,vz0,m0`, ... `x4,...,m4`) instead of iterating over
+a list of tuples and subscripting list elements (`v1[0] -= dx*b2m`). The body
+state is read out of the original lists ONCE at entry and written back ONCE at
+exit; every intermediate access inside the hot loop is a local variable
+(`LOAD_FAST`/`STORE_FAST`), not a list subscript. This is the software analogue
+of register allocation: it removes exactly the `list_ass_subscript` /
+`PyNumber_AsSsize_t` / repeated tuple-unpacking overhead the profile shows,
+without changing the arithmetic (still `(dx*dx+dy*dy+dz*dz) ** -1.5`) or the
+numeric algorithm at all.
+
+No external libraries were introduced (kept pure Python/stdlib, matching the
+benchmark's own dependency footprint).
+
+4. PERFORMANCE COMPARISON
+--------------------------------------------------------------------------------
+Measured with `pyperf compare_to` (results/nbody_compare.txt):
+
+    Mean +- std dev: [nbody_orig] 3.93 sec +- 0.38 sec
+                   -> [nbody_opt]  2.50 sec +- 0.22 sec
+                   : 1.58x faster  (~37% reduction in wall time)
+
+This clears the assignment's >=7% bar by a wide margin.
+
+Correctness (results/nbody_correctness.txt): both versions report the same
+final system energy to 9 decimal places:
+    final energy original : -0.169089263
+    final energy optimized: -0.169089263
+    CORRECTNESS: PASS (identical output)
+The optimized flame graph (results/nbody_opt.svg) shows the same relative
+shape with a visibly narrower/shallower interpreter-overhead region, since the
+per-step Python bytecode count dropped.
+
+5. HARDWARE ACCELERATION
+--------------------------------------------------------------------------------
+Per a course clarification (see CHANGES.md), the spec's hardware-acceleration
+requirement ("one or two key components of the benchmark," project spec p.4
+item 7) is satisfied once per submission, not once per benchmark. This
+project's single accelerator is featured on **pyflate** (its Huffman-decode +
+bit-reading stage) - see report_pyflate.txt section 5, including a measured
+profile-fraction and an Amdahl's-Law estimate of the resulting overall
+speedup.
+
+nbody is therefore **software-only** in this submission. A complete,
+independently-simulated N-body Processing Element proposal (9-stage pipelined
+FP datapath, AXI4-Lite + AXI4-Stream interface, self-checking testbench:
+`TB PASS: 5 pairs checked, 0 mismatches.`) was designed and verified for this
+benchmark earlier in the project and is kept for reference under
+`_archive/hardware_nbody/` (SystemVerilog sources + `HARDWARE.md` with the
+full block diagram, register map, and area/power/perf trade-offs) - it targets
+exactly the bottleneck this report identifies (interpreter dispatch + list
+indexing around a fixed per-pair arithmetic recipe, replaced by a streamed
+one-pair-per-clock pipeline) and remains available to present if useful, but
+is not part of the graded hardware deliverable for this benchmark.
+
+6. CONCLUSION
+--------------------------------------------------------------------------------
+The nbody benchmark is bottlenecked by CPython interpreter and list-indexing
+overhead, not floating-point throughput - confirmed by first trying (and
+measuring away) an FPU-focused optimization that produced no real gain, then
+finding and validating the actual bottleneck with `perf`+flame graphs. The
+scalar-locals rewrite ("software register allocation") delivered a measured
+1.58x / ~37% speedup with byte-identical output, comfortably clearing the >=7%
+target. This project's hardware-acceleration proposal is featured on the
+companion pyflate benchmark instead (see report_pyflate.txt); the same
+underlying idea - replace "N python bytecodes per scalar op" with a streamed,
+interpreter-free datapath - applies equally to nbody's per-pair force
+computation, as documented in the archived nbody accelerator design.

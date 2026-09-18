@@ -1,0 +1,106 @@
+AI TOOL PROMPTS LOG
+===================
+(Required by the project spec, section 10 / "What You Need to Submit". Add new
+prompts here as you use AI during the project.)
+
+--------------------------------------------------------------------------------
+Prompt 1 — project understanding & planning
+--------------------------------------------------------------------------------
+"Read all the course material (lectures, tutorials, HW1, HW2) and especially the
+project spec. Understand what the project asks, choose 2 benchmarks from the
+approved list, and explain them simply."
+-> Chose nbody + pyflate; produced the plan and this project scaffold.
+
+--------------------------------------------------------------------------------
+Prompt 2 — nbody optimization
+--------------------------------------------------------------------------------
+"For the pyperformance nbody benchmark, propose a correctness-preserving
+optimization and MEASURE it (don't assume)."
+-> First idea: replace the inner-loop `(dx*dx+dy*dy+dz*dz) ** -1.5` general
+   power with `dt / (d2 * sqrt(d2))` (hardware sqrt). MEASURED: ~0-1.5% — no
+   real gain on modern CPython. Lesson: the bottleneck is interpreter/memory
+   overhead, not the FPU power op.
+-> Working optimization: since nbody has a fixed 5-body working set, specialize
+   the force loop into straight-line code over LOCAL SCALARS (x0,y0,z0,vx0,...),
+   removing per-iteration list subscripting and tuple unpacking (software
+   register allocation). MEASURED: ~1.5x / ~36% faster, byte-identical output.
+
+--------------------------------------------------------------------------------
+Prompt 3 — pyflate optimization plan
+--------------------------------------------------------------------------------
+"pyflate is a pure-Python bzip2/gzip decompressor. Given typical profiles, what
+are the safe high-impact optimizations that keep output identical?"
+-> (1) byte-at-a-time bit-buffer reader instead of per-bit readbit();
+   (2) table-driven (peek-max_len-bits) Huffman decode instead of the bit-by-bit
+   walk; (3) bytearray output buffer; (4) localize hot attribute lookups.
+   See pyflate/OPTIMIZATION_PLAN.txt.
+
+--------------------------------------------------------------------------------
+Prompt 4 — running the workflow on the real course VM
+--------------------------------------------------------------------------------
+"Read the Project.pdf and the prepared project/ handoff folder and the VM
+playbook, then actually run and test everything on the VM so we have real
+results." (VM turned out to be QEMU on the course server tangerine/naranja10,
+not a local VirtualBox VM as first assumed.)
+-> Set up SSH access from the host laptop into the course server, then into
+   the QEMU guest (booted with software emulation, TCG, since the course
+   account has no KVM group membership); installed perf/python3-dbg/pyperf/
+   pyperformance (working around an interrupted-dpkg state and a
+   kernel-version-specific linux-tools package); ran scripts/00_setup.sh,
+   scripts/script_nbody.sh, and scripts/script_pyflate.sh for real, producing
+   the actual perf reports, flame graphs, and pyperf JSON/compare files under
+   results/.
+
+--------------------------------------------------------------------------------
+Prompt 5 — writing the exact, source-matched pyflate optimization
+--------------------------------------------------------------------------------
+"Here is the real pyflate/orig/run_benchmark.py copied off the VM's installed
+pyperformance package, and the perf profile (report_pyflate.txt / flame
+graph) from actually running it. Write the optimized version."
+-> Read the real source (a single self-contained run_benchmark.py — this
+   pyperformance version has no separate pyflate.py module) and the profile.
+   The profile showed CPython allocator/object-churn overhead (memset,
+   _PyMem_DebugCheckAddress, list_dealloc) dominating after the base
+   interpreter-dispatch cost, which pointed at three concrete lines:
+   move_to_front()'s triple-slice-and-concatenate, RBitfield's per-byte file
+   reads, and HuffmanTable.find_next_symbol()'s O(table size) linear scan.
+   Implemented: (1) an in-memory byte buffer for RBitfield instead of a live
+   file object, (2) an in-place del+insert move_to_front, (3) a capped
+   (max_bits<=15) direct-lookup Huffman decode table with the original linear
+   scan kept as a correctness fallback. Verified byte-for-byte identical
+   output against orig/ via a standalone MD5/diff check before running the
+   full pyperf comparison, which measured 1.50x (17.6s -> 11.7s).
+
+--------------------------------------------------------------------------------
+Prompt 6 — course clarification: hardware only needs to cover one benchmark
+--------------------------------------------------------------------------------
+"See this change since the course have a clarification update
+(HWSW_CHANGE.zip) — please do the needed changes as required."
+-> Read the clarification package: the spec's hardware requirement ("one or
+   two key components of the benchmark") is satisfied by ONE accelerator
+   across the whole submission, not one per benchmark. Kept the pyflate
+   Huffman-decode accelerator as the project's single accelerator; archived
+   the nbody N-body PE design to _archive/hardware_nbody/ (not deleted) and
+   made nbody software-only in report_nbody.txt.
+-> The clarification also asked for the accelerator's "performance effect,"
+   which for a design proposal (not synthesized) has to be an ESTIMATE, via
+   Amdahl's Law: overall_speedup = 1/((1-f) + f/s). Rather than eyeball f off
+   perf's raw C-symbol report (which can't be cleanly attributed to specific
+   Python functions), re-ran the ORIGINAL pyflate/orig/run_benchmark.py under
+   Python's own cProfile on one real decode, and bucketed self-time (tottime,
+   so nested calls aren't double-counted) into exactly the functions the
+   accelerator replaces: RBitfield's bit-reading methods (27.70%) +
+   HuffmanTable.find_next_symbol (15.85%) = f = 43.55%. Derived s (~3,100x)
+   by comparing the software's measured symbols/s for that component against
+   the hardware design's own ~60M symbols/s estimate, giving an overall
+   estimate of ~1.77x — and checked that this result is dominated by f, not
+   s (even s->infinity only reaches 1.77x), so it's robust to the s
+   assumption. Wrote this derivation into report_pyflate.txt section 5 and
+   CHANGES.md, with the raw cProfile output kept as evidence
+   (results/pyflate_cprofile_hw_fraction.txt) and an explicit caveat about
+   cProfile's own per-call instrumentation overhead.
+
+--------------------------------------------------------------------------------
+(Continue logging prompts below as the project progresses — e.g. presentation
+drafting.)
+--------------------------------------------------------------------------------
