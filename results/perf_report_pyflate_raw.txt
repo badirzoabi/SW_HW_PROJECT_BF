@@ -1,0 +1,150 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 5M of event 'cpu-clock:pppH'
+# Event count (approx.): 5715879874164
+#
+# Children      Self  Command      Shared Object                              Symbol                                                      
+# ........  ........  ...........  .........................................  ............................................................
+#
+    20.77%    20.76%  python       python3.10d                                [.] _PyEval_EvalFrameDefault
+            |          
+            |--0.71%--0xfdfdfdfdfd000053
+            |          _PyEval_EvalFrameDefault
+            |          
+             --0.64%--0xfdfdfdfdfdfdfd00
+                       _PyEval_EvalFrameDefault
+
+    13.45%     0.00%  python       [unknown]                                  [.] 0x00000000009af720
+            |
+            ---0x9af720
+               |          
+               |--1.02%--long_richcompare.lto_priv.0
+               |          
+               |--0.97%--binary_op1
+               |          
+               |--0.73%--PyLong_FromLong
+               |          
+               |--0.59%--do_richcompare
+               |          
+               |--0.56%--PyGILState_Check
+               |          
+               |--0.53%--long_bitwise
+               |          
+                --0.52%--_Py_CheckSlotResult
+
+     4.30%     0.00%  python       [unknown]                                  [.] 0xdddddddddddddddd
+            |
+            ---0xdddddddddddddddd
+               |          
+               |--1.26%--__memset_sse2_unaligned_erms
+               |          
+               |--0.69%--_PyMem_DebugRawFree
+               |          
+                --0.53%--_PyObject_Free
+
+     4.18%     0.00%  python       [unknown]                                  [.] 0xfdfdfdfdfdfdfd6f
+            |
+            ---0xfdfdfdfdfdfdfd6f
+               |          
+               |--1.13%--__memset_sse2_unaligned_erms
+               |          
+               |--0.95%--_PyMem_DebugRawFree
+               |          
+               |--0.66%--_PyMem_DebugCheckAddress
+               |          
+                --0.53%--read_size_t
+
+     3.71%     3.51%  python       libc.so.6                                  [.] __memset_sse2_unaligned_erms
+            |          
+            |--1.26%--0xdddddddddddddddd
+            |          |          
+            |           --1.25%--__memset_sse2_unaligned_erms
+            |          
+            |--1.13%--0xfdfdfdfdfdfdfd6f
+            |          __memset_sse2_unaligned_erms
+            |          
+            |--0.54%--0xfdfdfdfdfdfdfd72
+            |          __memset_sse2_unaligned_erms
+            |          
+             --0.51%--0xfdfdfdfdfdfdfd6d
+                       __memset_sse2_unaligned_erms
+
+     3.35%     0.00%  python       [unknown]                                  [.] 0000000000000000
+            |
+            ---0
+
+     2.99%     0.00%  python       [unknown]                                  [.] 0x4677615267756265
+            |
+            ---0x4677615267756265
+               |          
+               |--1.90%--_PyMem_DebugCheckAddress
+               |          
+                --1.09%--read_size_t
+
+     2.69%     2.69%  python       python3.10d                                [.] _PyMem_DebugCheckAddress
+            |          
+            |--1.90%--0x4677615267756265
+            |          _PyMem_DebugCheckAddress
+            |          
+             --0.66%--0xfdfdfdfdfdfdfd6f
+                       _PyMem_DebugCheckAddress
+
+     2.45%     0.00%  python       [unknown]                                  [.] 0x00000000009ac380
+            |
+            ---0x9ac380
+               |          
+                --1.41%--list_dealloc.lto_priv.0
+
+     2.10%     2.10%  python       python3.10d                                [.] _PyMem_DebugRawFree
+            |          
+            |--0.95%--0xfdfdfdfdfdfdfd6f
+            |          _PyMem_DebugRawFree
+            |          
+             --0.84%--0xdddddddddddddddd
+                       |          
+                        --0.68%--_PyMem_DebugRawFree
+
+     1.93%     1.93%  python       python3.10d                                [.] PyGILState_Check
+            |          
+            |--0.98%--PyGILState_Check
+            |          
+             --0.56%--0x9af720
+                       |          
+                        --0.56%--PyGILState_Check
+
+     1.89%     0.00%  python       [unknown]                                  [.] 0x00000000009af3a0
+            |
+            ---0x9af3a0
+
+     1.74%     0.00%  python       [unknown]                                  [.] 0x00000000009a7640
+            |
+            ---0x9a7640
+
+     1.71%     1.71%  python       python3.10d                                [.] read_size_t
+            |          
+            |--1.09%--0x4677615267756265
+            |          read_size_t
+            |          
+             --0.53%--0xfdfdfdfdfdfdfd6f
+                       read_size_t
+
+     1.61%     1.61%  python       python3.10d                                [.] _PyEval_MakeFrameVector
+            |          
+             --1.12%--_PyEval_MakeFrameVector
+
+     1.56%     0.00%  python       [unknown]                                  [.] 0x00000000009a0ea0
+            |
+            ---0x9a0ea0
+               |          
+                --1.08%--frame_dealloc.lto_priv.0
+
+     1.55%     1.55%  python       python3.10d                                [.] PyTuple_GetItem
+     1.54%     1.54%  python       python3.10d                                [.] _PyMem_DebugRawAlloc
+            |          
+             --0.63%--_PyMem_DebugRawAlloc
+
+     1.46%     1.46%  python       python3.10d                                [.] list_dealloc.lto_priv.0
+            |          

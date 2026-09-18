@@ -1,0 +1,42 @@
+Traceback (most recent call last):
+  File "/root/project/pyflate/orig/run_benchmark.py", line 665, in <module>
+    runner.bench_time_func('pyflate', bench_pyflake, filename)
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_runner.py", line 502, in bench_time_func
+    result = self._main(task)
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_runner.py", line 463, in _main
+    bench = self._worker(task)
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_runner.py", line 437, in _worker
+    run = task.create_run()
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_worker.py", line 300, in create_run
+    self.compute()
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_worker.py", line 364, in compute
+    WorkerTask.compute(self)
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_worker.py", line 287, in compute
+    self.calibrate_loops()
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_worker.py", line 250, in calibrate_loops
+    self._compute_values(self.warmups, nvalue,
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_worker.py", line 79, in _compute_values
+    raw_value = task_func(self, self.loops)
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_runner.py", line 497, in task_func
+    return time_func(loops, *args)
+  File "/root/project/pyflate/orig/run_benchmark.py", line 633, in bench_pyflake
+    input_fp = open(filename, 'rb')
+FileNotFoundError: [Errno 2] No such file or directory: '/root/project/pyflate/orig/data/interpreter.tar.bz2'
+Traceback (most recent call last):
+  File "/root/project/pyflate/orig/run_benchmark.py", line 665, in <module>
+    runner.bench_time_func('pyflate', bench_pyflake, filename)
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_runner.py", line 502, in bench_time_func
+    result = self._main(task)
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_runner.py", line 468, in _main
+    bench = self._manager()
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_runner.py", line 681, in _manager
+    bench = Manager(self).create_bench()
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_manager.py", line 243, in create_bench
+    worker_bench, run = self.create_worker_bench()
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_manager.py", line 142, in create_worker_bench
+    suite = self.create_suite()
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_manager.py", line 132, in create_suite
+    suite = self.spawn_worker(self.calibrate_loops, 0)
+  File "/usr/local/lib/python3.10/dist-packages/pyperf/_manager.py", line 118, in spawn_worker
+    raise RuntimeError("%s failed with exit code %s"
+RuntimeError: /usr/bin/python3 failed with exit code 1
