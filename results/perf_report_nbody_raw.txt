@@ -1,0 +1,150 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 310K of event 'cpu-clock:pppH'
+# Event count (approx.): 310943943633
+#
+# Children      Self  Command      Shared Object         Symbol                                        
+# ........  ........  ...........  ....................  ..............................................
+#
+    35.02%    35.00%  python3-dbg  python3.10d           [.] _PyEval_EvalFrameDefault
+            |          
+            |--1.12%--0x3c000300370014
+            |          _PyEval_EvalFrameDefault
+            |          
+            |--0.81%--0x300370014137c
+            |          _PyEval_EvalFrameDefault
+            |          
+            |--0.75%--0x3c000300380014
+            |          _PyEval_EvalFrameDefault
+            |          
+            |--0.75%--0x300380014147c
+            |          _PyEval_EvalFrameDefault
+            |          
+            |--0.65%--0x127d001400130164
+            |          _PyEval_EvalFrameDefault
+            |          
+            |--0.63%--0xa7d035c035c097d
+            |          _PyEval_EvalFrameDefault
+            |          
+            |--0.56%--0x35c035c097d087d
+            |          _PyEval_EvalFrameDefault
+            |          
+            |--0.54%--0x137d0014127c097c
+            |          _PyEval_EvalFrameDefault
+            |          
+             --0.51%--0x117c001900050464
+                       _PyEval_EvalFrameDefault
+
+    29.27%     0.00%  python3-dbg  [unknown]             [.] 0x00000000009ad3c0
+            |
+            ---0x9ad3c0
+               |          
+               |--4.96%--binary_op1
+               |          
+               |--2.87%--_Py_CheckSlotResult
+               |          
+               |--2.46%--PyFloat_FromDouble
+               |          
+               |--2.33%--float_mul.lto_priv.0
+               |          
+               |--2.03%--list_ass_subscript.lto_priv.0
+               |          
+               |--1.84%--PyNumber_AsSsize_t
+               |          
+               |--1.54%--float_add.lto_priv.0
+               |          
+               |--1.53%--float_sub.lto_priv.0
+               |          
+               |--1.46%--list_ass_item.lto_priv.0
+               |          
+               |--1.16%--float_dealloc.lto_priv.0
+               |          
+               |--1.05%--binary_iop1
+               |          
+               |--1.02%--PyNumber_Multiply
+               |          
+               |--1.01%--PyLong_AsSsize_t
+               |          
+               |--0.89%--PyObject_SetItem
+               |          
+               |--0.73%--_Py_Dealloc
+               |          
+               |--0.67%--ternary_op
+               |          
+                --0.53%--_PyNumber_Index
+
+     7.31%     7.30%  python3-dbg  python3.10d           [.] PyFloat_FromDouble
+            |          
+            |--4.85%--PyFloat_FromDouble
+            |          
+             --2.46%--0x9ad3c0
+                       PyFloat_FromDouble
+
+     5.00%     5.00%  python3-dbg  python3.10d           [.] binary_op1
+            |          
+             --4.96%--0x9ad3c0
+                       binary_op1
+
+     4.83%     0.00%  python3-dbg  [unknown]             [.] 0x00000000009af720
+            |
+            ---0x9af720
+               |          
+               |--1.37%--list_subscript.lto_priv.0
+               |          
+               |--1.29%--PyNumber_AsSsize_t
+               |          
+               |--1.01%--PyLong_AsSsize_t
+               |          
+                --0.66%--PyObject_GetItem
+
+     4.61%     4.60%  python3-dbg  python3.10d           [.] float_dealloc.lto_priv.0
+            |          
+             --1.16%--0x9ad3c0
+                       float_dealloc.lto_priv.0
+
+     3.69%     3.69%  python3-dbg  python3.10d           [.] PyNumber_AsSsize_t
+            |          
+            |--1.84%--0x9ad3c0
+            |          PyNumber_AsSsize_t
+            |          
+            |--1.29%--0x9af720
+            |          PyNumber_AsSsize_t
+            |          
+             --0.57%--PyNumber_AsSsize_t
+
+     3.44%     3.44%  python3-dbg  python3.10d           [.] _Py_CheckSlotResult
+            |          
+            |--2.86%--0x9ad3c0
+            |          _Py_CheckSlotResult
+            |          
+             --0.58%--_Py_CheckSlotResult
+
+     3.01%     3.01%  python3-dbg  python3.10d           [.] _Py_Dealloc
+            |          
+             --0.73%--0x9ad3c0
+                       _Py_Dealloc
+
+     2.50%     2.50%  python3-dbg  libm.so.6             [.] __ieee754_pow_sse2
+            |
+            ---__ieee754_pow_sse2
+
+     2.33%     2.32%  python3-dbg  python3.10d           [.] float_mul.lto_priv.0
+            |          
+             --2.32%--0x9ad3c0
+                       float_mul.lto_priv.0
+
+     2.27%     2.27%  python3-dbg  python3.10d           [.] list_subscript.lto_priv.0
+            |          
+            |--1.37%--0x9af720
+            |          list_subscript.lto_priv.0
+            |          
+             --0.90%--list_subscript.lto_priv.0
+
+     2.19%     2.19%  python3-dbg  python3.10d           [.] PyNumber_Multiply
+            |          
+             --1.02%--0x9ad3c0
+                       PyNumber_Multiply
+

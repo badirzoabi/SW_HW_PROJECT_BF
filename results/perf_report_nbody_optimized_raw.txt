@@ -1,0 +1,150 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 186K of event 'cpu-clock:pppH'
+# Event count (approx.): 186394394208
+#
+# Children      Self  Command      Shared Object         Symbol                                                    
+# ........  ........  ...........  ....................  ..........................................................
+#
+    32.91%    32.89%  python3-dbg  python3.10d           [.] _PyEval_EvalFrameDefault
+            |          
+            |--1.04%--0x2a7d001400130664
+            |          _PyEval_EvalFrameDefault
+            |          
+            |--0.58%--0x170014287c287c
+            |          _PyEval_EvalFrameDefault
+            |          
+             --0.57%--0x14277c277c007c
+                       _PyEval_EvalFrameDefault
+
+    29.14%     0.00%  python3-dbg  [unknown]             [.] 0x00000000009ad3c0
+            |
+            ---0x9ad3c0
+               |          
+               |--8.44%--binary_op1
+               |          
+               |--3.84%--PyFloat_FromDouble
+               |          
+               |--3.57%--float_mul.lto_priv.0
+               |          
+               |--3.35%--_Py_CheckSlotResult
+               |          
+               |--2.50%--float_add.lto_priv.0
+               |          
+               |--2.34%--float_sub.lto_priv.0
+               |          
+               |--1.62%--binary_iop1
+               |          
+               |--1.36%--PyNumber_Multiply
+               |          
+                --1.04%--ternary_op
+
+    11.98%    11.98%  python3-dbg  python3.10d           [.] PyFloat_FromDouble
+            |          
+            |--8.15%--PyFloat_FromDouble
+            |          
+             --3.83%--0x9ad3c0
+                       PyFloat_FromDouble
+
+     8.49%     8.48%  python3-dbg  python3.10d           [.] binary_op1
+            |          
+             --8.43%--0x9ad3c0
+                       binary_op1
+
+     7.47%     7.47%  python3-dbg  python3.10d           [.] float_dealloc.lto_priv.0
+            |          
+             --0.53%--0x2a7d001400130664
+                       float_dealloc.lto_priv.0
+
+     4.25%     4.25%  python3-dbg  python3.10d           [.] _Py_Dealloc
+     3.57%     3.57%  python3-dbg  python3.10d           [.] float_mul.lto_priv.0
+            |          
+             --3.57%--0x9ad3c0
+                       float_mul.lto_priv.0
+
+     3.35%     3.35%  python3-dbg  python3.10d           [.] _Py_CheckSlotResult
+            |          
+             --3.35%--0x9ad3c0
+                       _Py_CheckSlotResult
+
+     3.32%     3.32%  python3-dbg  libm.so.6             [.] __ieee754_pow_sse2
+            |
+            ---__ieee754_pow_sse2
+
+     3.09%     3.09%  python3-dbg  python3.10d           [.] PyNumber_Multiply
+            |          
+             --1.36%--0x9ad3c0
+                       PyNumber_Multiply
+
+     2.82%     2.82%  python3-dbg  python3.10d           [.] _Py_NewReference
+            |          
+             --2.82%--_Py_NewReference
+
+     2.50%     2.49%  python3-dbg  python3.10d           [.] float_add.lto_priv.0
+            |          
+             --2.49%--0x9ad3c0
+                       float_add.lto_priv.0
+
+     2.34%     2.34%  python3-dbg  python3.10d           [.] float_sub.lto_priv.0
+            |          
+             --2.34%--0x9ad3c0
+                       float_sub.lto_priv.0
+
+     2.21%     0.00%  python3-dbg  [unknown]             [.] 0x2a7d001400130664
+            |
+            ---0x2a7d001400130664
+               |          
+               |--1.04%--_PyEval_EvalFrameDefault
+               |          
+                --0.54%--float_dealloc.lto_priv.0
+
+     1.62%     1.62%  python3-dbg  python3.10d           [.] binary_iop1
+            |          
+             --1.62%--0x9ad3c0
+                       binary_iop1
+
+     1.48%     1.48%  python3-dbg  python3.10d           [.] get_float_state
+            |          
+             --1.02%--get_float_state
+
+     1.36%     1.36%  python3-dbg  python3.10d           [.] PyNumber_Subtract
+     1.24%     1.24%  python3-dbg  python3.10d           [.] ternary_op
+            |          
+             --1.04%--0x9ad3c0
+                       ternary_op
+
+     1.04%     0.00%  python3-dbg  [unknown]             [.] 0x00170014287c287c
+            |
+            ---0x170014287c287c
+               |          
+                --0.58%--_PyEval_EvalFrameDefault
+
+     1.00%     0.00%  python3-dbg  [unknown]             [.] 0x0014277c277c007c
+            |
+            ---0x14277c277c007c
+               |          
+                --0.57%--_PyEval_EvalFrameDefault
+
+     1.00%     1.00%  python3-dbg  python3.10d           [.] float_pow.lto_priv.0
+            |          
+             --0.87%--float_pow.lto_priv.0
+
+     0.86%     0.86%  python3-dbg  python3.10d           [.] PyNumber_InPlaceAdd
+     0.81%     0.00%  python3-dbg  [unknown]             [.] 0x277c277c007c297d
+            |
+            ---0x277c277c007c297d
+
+     0.77%     0.00%  python3-dbg  [unknown]             [.] 0x0014287c287c0014
+            |
+            ---0x14287c287c0014
+
+     0.74%     0.00%  python3-dbg  [unknown]             [.] 0x2b7d00142a7c097c
+            |
+            ---0x2b7d00142a7c097c
+
+     0.66%     0.00%  python3-dbg  [unknown]             [.] 0x2c7d00142a7c107c
+            |
+            ---0x2c7d00142a7c107c

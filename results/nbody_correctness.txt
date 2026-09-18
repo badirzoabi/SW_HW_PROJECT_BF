@@ -1,0 +1,3 @@
+final energy original : -0.169089263
+final energy optimized: -0.169089263
+CORRECTNESS: PASS (identical output)

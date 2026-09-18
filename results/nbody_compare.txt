@@ -1,0 +1,1 @@
+Mean +- std dev: [nbody_orig] 3.93 sec +- 0.38 sec -> [nbody_opt] 2.50 sec +- 0.22 sec: 1.58x faster
