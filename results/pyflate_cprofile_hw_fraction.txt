@@ -1,0 +1,78 @@
+cProfile run of pyflate/orig/run_benchmark.py (unmodified original), single
+real decode of data/interpreter.tar.bz2, used to derive f for the Amdahl's
+Law hardware-speedup estimate in report_pyflate.txt section 5.
+Produced by: pyflate/cprofile_hw_fraction.py
+================================================================================
+
+decoded 399360 bytes
+
+==== FULL PROFILE (by self/tottime) ====
+         3185453 function calls in 35.959 seconds
+
+   Ordered by: internal time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    8.410    8.410   35.685   35.685 run_benchmark.py:394(decode_huffman_block)
+   148271    5.686    0.000   17.914    0.000 run_benchmark.py:224(find_next_symbol)
+   156708    3.710    0.000    4.707    0.000 run_benchmark.py:117(readbits)
+    92803    3.704    0.000    3.704    0.000 run_benchmark.py:288(move_to_front)
+   341601    3.434    0.000    7.831    0.000 run_benchmark.py:112(snoopbits)
+   655017    2.071    0.000    2.071    0.000 run_benchmark.py:54(_mask)
+        1    1.497    1.497    3.507    3.507 run_benchmark.py:306(bwt_reverse)
+        1    1.305    1.305    1.634    1.634 run_benchmark.py:292(bwt_transform)
+    67562    1.184    0.000    1.533    0.000 run_benchmark.py:43(_read)
+   766811    1.161    0.000    1.161    0.000 {method 'append' of 'list' objects}
+    67562    1.100    0.000    2.790    0.000 run_benchmark.py:106(_more)
+   674570    0.890    0.000    0.890    0.000 {built-in method builtins.len}
+    67526    0.532    0.000    3.323    0.000 run_benchmark.py:50(needbits)
+        2    0.374    0.187    0.374    0.187 {method 'join' of 'bytes' objects}
+        1    0.242    0.242    0.242    0.242 {built-in method builtins.sorted}
+    67562    0.196    0.000    0.196    0.000 {method 'read' of '_io.BytesIO' objects}
+    76108    0.170    0.000    0.170    0.000 {built-in method builtins.ord}
+      256    0.086    0.000    0.086    0.000 {method 'find' of 'bytes' objects}
+        1    0.079    0.079    0.376    0.376 run_benchmark.py:355(compute_selectors_list)
+      882    0.050    0.000    0.050    0.000 run_benchmark.py:153(reverse_bits)
+        6    0.018    0.003    0.035    0.006 run_benchmark.py:179(__init__)
+        1    0.017    0.017    0.184    0.184 run_benchmark.py:372(compute_tables)
+        6    0.010    0.002    0.060    0.010 run_benchmark.py:192(populate_huffman_symbols)
+        1    0.009    0.009   35.955   35.955 run_benchmark.py:460(bzip2_main)
+      882    0.008    0.000    0.008    0.000 run_benchmark.py:139(__init__)
+        6    0.004    0.001    0.007    0.001 {method 'sort' of 'list' objects}
+      882    0.003    0.000    0.003    0.000 run_benchmark.py:148(_sort_func)
+        6    0.003    0.000    0.003    0.000 run_benchmark.py:210(min_max_bits)
+        1    0.002    0.002    0.004    0.004 run_benchmark.py:336(compute_used)
+        6    0.002    0.000    0.036    0.006 run_benchmark.py:248(__init__)
+      401    0.001    0.000    0.001    0.000 {method 'pack' of '_struct.Struct' objects}
+        2    0.001    0.001    0.002    0.001 run_benchmark.py:31(__init__)
+        1    0.001    0.001    0.001    0.001 run_benchmark.py:409(<listcomp>)
+        1    0.000    0.000    0.000    0.000 {built-in method builtins.sum}
+        2    0.000    0.000    0.000    0.000 {built-in method builtins.isinstance}
+        1    0.000    0.000    0.000    0.000 run_benchmark.py:57(toskip)
+        1    0.000    0.000    0.000    0.000 run_benchmark.py:60(align)
+
+==== BUCKETED SELF-TIME (tottime) ====
+total self-time across all functions : 35.959033 s
+bit-reading (RBitfield.*)             : 9.960788 s  (27.70%)
+huffman decode (HuffmanTable.*)       : 5.699140 s  (15.85%)
+COMBINED (bit-reading + huffman)       : 15.659928 s  (43.55%)  <- this is f
+
+==== PER-FUNCTION BREAKDOWN (the bucketed functions only) ====
+  find_next_symbol         calls=148271   tottime=5.6859s cumtime=17.9141s (15.81% of total)
+  readbits                 calls=156708   tottime=3.7102s cumtime=4.7066s (10.32% of total)
+  snoopbits                calls=341601   tottime=3.4336s cumtime=7.8305s (9.55% of total)
+  _read                    calls=67562    tottime=1.1843s cumtime=1.5326s (3.29% of total)
+  _more                    calls=67562    tottime=1.1002s cumtime=2.7901s (3.06% of total)
+  needbits                 calls=67526    tottime=0.5325s cumtime=3.3226s (1.48% of total)
+  populate_huffman_symbols calls=6        tottime=0.0103s cumtime=0.0599s (0.03% of total)
+  min_max_bits             calls=6        tottime=0.0030s cumtime=0.0030s (0.01% of total)
+  align                    calls=1        tottime=0.0000s cumtime=0.0001s (0.00% of total)
+
+================================================================================
+Note: cProfile is a deterministic profiler and adds per-call instrumentation
+overhead (this run took 35.96s vs. pyperf's uninstrumented ~17.6s mean for the
+same decode). Because that overhead scales roughly with call count, and the
+bucketed functions are exactly the highest-call-count ones (up to 655,017
+calls), f=43.55% may be a slight overestimate of the true uninstrumented
+fraction. This does not materially change the Amdahl conclusion: the estimate
+is dominated by (1-f), and even a noticeably smaller true f would still yield
+a broadly similar ~1.6-1.8x overall-speedup estimate.
