@@ -1,0 +1,78 @@
+pyflate OPTIMIZATION PLAN
+=========================
+
+WHAT pyflate IS
+---------------
+pyflate.py is a *pure-Python* implementation of gzip (DEFLATE) and bzip2
+decompression. The pyperformance `pyflate` benchmark decompresses an embedded
+bzip2 file. bzip2 decode = Huffman decode -> Move-To-Front (MTF) + RLE ->
+inverse Burrows-Wheeler Transform (BWT). Everything is done one bit / one byte
+at a time in Python, which is why it is slow and a great optimization target.
+
+WHERE THE TIME GOES (confirm with results/report_pyflate.txt + flame graph)
+---------------------------------------------------------------------------
+Typical hotspots, in order:
+  1. Bit reading — the Bitfield/BitfieldBase reader: readbit() / readbits()
+     pull ONE bit at a time, doing a shift+mask+counter update per bit. Called
+     millions of times.
+  2. Huffman decode — HuffmanTable / OrderedHuffmanTable.find_next_symbol():
+     walks the code bit-by-bit down the table until a symbol matches. Linear-ish
+     per symbol.
+  3. inverse BWT + MTF/RLE loops — big per-byte Python loops building the output.
+
+SAFE, HIGH-IMPACT OPTIMIZATIONS (pick the ones the profile justifies)
+---------------------------------------------------------------------
+These keep output byte-for-byte identical (that is the correctness bar).
+
+  OPT-1  Faster bit reader (usually the biggest win)
+     * Keep a small integer "bit buffer" + "bit count". Refill it a BYTE (or
+       several bytes) at a time from the input instead of per bit.
+     * readbits(n): while bitcount < n: buffer |= next_byte << bitcount;
+       bitcount += 8 . Then take the low n bits, shift buffer right by n.
+     * This replaces N python-level readbit() calls with ~N/8 byte reads.
+
+  OPT-2  Table-driven Huffman decode
+     * Precompute, per Huffman table, a lookup keyed by the next `max_len` bits:
+       a list/array of size 2**max_len mapping bit-pattern -> (symbol, code_len).
+       Peek max_len bits from the bit buffer, index the table in O(1), then
+       advance the bit buffer by the real code length. Replaces the bit-by-bit
+       find_next_symbol walk with one array index.
+     * Build the table once when the Huffman table is created.
+
+  OPT-3  Output buffer
+     * Accumulate output in a bytearray and append ints, instead of string
+       concatenation or list-of-chars + join, if the original does the slow
+       thing. bytearray.append / extend is O(1) amortized.
+
+  OPT-4  Localize hot globals/attrs
+     * Bind hot methods/functions to locals inside the hottest loops
+       (e.g. `readbits = self.readbits`), removing per-iteration attribute loads.
+
+HOW TO APPLY
+------------
+Edit ONLY project/pyflate/opt/pyflate.py (orig/ stays as the untouched
+baseline). Change the internals of the hot functions; DO NOT change the public
+behavior or the data file. Re-run and compare:
+
+    cd project/pyflate/opt
+    python3 run_benchmark.py -o ../../results/pyflate_opt.json
+    python3 -m pyperf compare_to ../../results/pyflate_orig.json \
+                                 ../../results/pyflate_opt.json
+
+CORRECTNESS CHECK
+-----------------
+Decompress with both orig and opt and compare the output bytes:
+
+    cd project/pyflate
+    python3 - <<'PY'
+    import hashlib, importlib.util
+    def run(path):
+        spec = importlib.util.spec_from_file_location("pf", path)
+        m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+        # call the module's decompress entry point on the benchmark data here
+        # (match run_benchmark.py); then return the decompressed bytes
+    # assert hashlib.sha256(run("orig/pyflate.py")) == hashlib.sha256(run("opt/pyflate.py"))
+    PY
+
+(The planning assistant will fill in the exact entry-point calls once it sees
+the real run_benchmark.py — this is why OPTION A in script_pyflate.sh exists.)
