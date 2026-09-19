@@ -123,6 +123,25 @@ This clears the assignment's >=7% bar by a wide margin, and - combined with
 nbody's 1.58x - gives two benchmarks each independently past 7%, satisfying
 the project's "two or more benchmarks at >=7%" criterion.
 
+Optimized flame graph (results/pyflate_opt.svg; condensed report:
+results/perf_report_pyflate_optimized_raw.txt) - captured the same way as
+the original (perf record -F 999 -g on the python3-dbg build, standalone
+pyperf runner on pyflate/opt/run_benchmark.py): 3,874,538 samples, versus
+5,710,164 for the original at the same 999 Hz sampling rate - a ~32% drop
+in captured samples, consistent with the measured wall-clock speedup (both
+profiling runs carry perf + debug-build instrumentation overhead on top of
+the real work, so their own internal timings are not the authoritative
+before/after numbers - those are the pyperf compare_to figures above).
+Self-time shares in the optimized profile: 21.4% interpreter dispatch,
+3.48% memset, 2.84% _PyMem_DebugCheckAddress, 2.33% _PyMem_DebugRawFree,
+2.09% PyGILState_Check, 1.62% _PyMem_DebugRawAlloc - broadly similar
+*relative* shares to the original's allocator-churn signature. That is
+expected, not a sign the fix didn't work: these are percentages of a now
+~32% smaller total, so a similar-looking slice is still a smaller absolute
+amount of allocator churn - the real before/after evidence is the sample
+count drop and the measured 1.50x wall-clock speedup, not the relative
+breakdown staying visually similar.
+
 5. HARDWARE ACCELERATION PROPOSAL
 --------------------------------------------------------------------------------
 Target: the bit-reader + canonical Huffman decode stage (the two hottest

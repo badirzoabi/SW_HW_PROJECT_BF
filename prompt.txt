@@ -101,6 +101,23 @@ Prompt 6 — course clarification: hardware only needs to cover one benchmark
    cProfile's own per-call instrumentation overhead.
 
 --------------------------------------------------------------------------------
+Prompt 7 — missing optimized pyflate flame graph
+--------------------------------------------------------------------------------
+"please we need to run the benchmarks before and after with the python debug,
+i need the 4 flame graphs in the results, that is what is asked for"
+-> Checked results/: nbody had both flame graphs (nbody_orig.svg,
+   nbody_opt.svg) but pyflate only had the original (pyflate_baseline.svg) —
+   the optimized run was measured for timing via pyperf compare_to but never
+   separately profiled with perf record + FlameGraph. Re-ran
+   pyflate/opt/run_benchmark.py under `perf record -F 999 -g` on the
+   python3-dbg build (same method used for the original), producing
+   results/pyflate_opt.svg. All four required flame graphs now present.
+   Updated report_pyflate.txt with the comparison, including an honest note
+   that this profiling run's own internal timing (inflated by perf + debug
+   build overhead) is not the authoritative before/after number — that
+   remains the pyperf compare_to figures already reported.
+
+--------------------------------------------------------------------------------
 (Continue logging prompts below as the project progresses — e.g. presentation
 drafting.)
 --------------------------------------------------------------------------------

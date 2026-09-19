@@ -1,3 +1,21 @@
+# CHANGES
+
+## 2026-09-19 — missing optimized pyflate flame graph
+
+The spec asks for before/after flame graphs on the debug Python build; nbody
+already had both (`nbody_orig.svg`, `nbody_opt.svg`), but pyflate only had the
+**original** (`pyflate_baseline.svg`) — the optimized run had a measured
+`pyperf compare_to` result but was never separately profiled with `perf
+record` + FlameGraph. Fixed: re-ran `pyflate/opt/run_benchmark.py` under
+`perf record -F 999 -g` on the `python3-dbg` build (same method as the
+original), generating `results/pyflate_opt.svg` and a condensed report
+(`results/perf_report_pyflate_optimized_raw.txt`). All four required flame
+graphs now exist: `nbody_orig.svg`, `nbody_opt.svg`, `pyflate_baseline.svg`,
+`pyflate_opt.svg`. `report_pyflate.txt` §4 was updated with the comparison
+(sample-count drop, and an honest note that this profiling run's own timing
+is inflated by perf/debug-build overhead, so the authoritative before/after
+numbers remain the `pyperf compare_to` figures already in that section).
+
 # CHANGES — course clarification update (2026-09-18)
 
 ## What changed
