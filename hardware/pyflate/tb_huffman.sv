@@ -1,16 +1,7 @@
-// ============================================================================
-// tb_huffman.sv  —  Self-checking testbench for the canonical Huffman decoder.
-//
-// Hand-built 3-symbol canonical code:
-//   lengths: sym0 -> 1 bit, sym1 -> 2 bits, sym2 -> 2 bits
-//   canonical codes:  sym0 = "0", sym1 = "10", sym2 = "11"
-//   tables: cnt[1]=1, cnt[2]=2 ; symbol[] sorted by (len,sym) = {0,1,2}
-//
-// Encoded stream  A,C,B = sym0,sym2,sym1 = "0" "11" "10" = 01110 (pad) = 0x70.
-// Expected decode: 0, 2, 1.
-//
+// tb_huffman.sv — self-checking TB for huffman_decoder.
+// 3-symbol canonical code (0="0", 1="10", 2="11"); byte 0x70 encodes A,C,B.
+// Expected decode: {0, 2, 1}.
 //   iverilog -g2012 -o sim bit_buffer.sv huffman_decoder.sv tb_huffman.sv && vvp sim
-// ============================================================================
 `timescale 1ns/1ps
 
 module tb_huffman;

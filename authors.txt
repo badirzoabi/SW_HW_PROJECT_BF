@@ -1,0 +1,7 @@
+Authors
+=======
+Feras Hosen   (ID: 214626004)
+Badir Zoabi   (ID: 214576704)
+
+Course 00460882 — HW/SW Co-design — Final Project
+Benchmarks: nbody + pyflate (pyperformance)

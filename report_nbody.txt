@@ -112,10 +112,11 @@ per-step Python bytecode count dropped.
 Per a course clarification (see CHANGES.md), the spec's hardware-acceleration
 requirement ("one or two key components of the benchmark," project spec p.4
 item 7) is satisfied once per submission, not once per benchmark. This
-project's single accelerator is featured on **pyflate** (its Huffman-decode +
-bit-reading stage) - see report_pyflate.txt section 5, including a measured
-profile-fraction and an Amdahl's-Law estimate of the resulting overall
-speedup.
+project's hardware acceleration is featured on **pyflate** as a TWO-COMPONENT
+design (a bit-reader + Huffman-decode engine, plus a Move-To-Front unit -
+exactly the "one or two key components" the spec allows) - see
+report_pyflate.txt section 5, including measured profile-fractions and an
+Amdahl's-Law estimate of the resulting overall speedup.
 
 nbody is therefore **software-only** in this submission. A complete,
 independently-simulated N-body Processing Element proposal (9-stage pipelined

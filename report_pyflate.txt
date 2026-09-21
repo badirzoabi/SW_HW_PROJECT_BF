@@ -144,13 +144,24 @@ breakdown staying visually similar.
 
 5. HARDWARE ACCELERATION PROPOSAL
 --------------------------------------------------------------------------------
-Target: the bit-reader + canonical Huffman decode stage (the two hottest
-software operations identified above), implemented in SystemVerilog under
-hardware/pyflate/ (bit_buffer.sv, huffman_decoder.sv, huffman_accel.sv,
-tb_huffman.sv, full writeup in hardware/pyflate/HARDWARE.md). Simulated and
-passing: `TB PASS: decoded {0,2,1} == {0,2,1}` (Icarus Verilog, iverilog
--g2012). Unlike the nbody PE, this design is fully INTEGER - no floating
-point - and fully synthesizable as described.
+We propose a TWO-COMPONENT hardware accelerator covering the two hottest,
+most hardware-friendly stages of the bzip2 decode pipeline
+(Huffman -> MTF -> RLE -> inverse-BWT):
+
+  (A) a bit-reader + canonical Huffman decode engine, and
+  (B) a Move-To-Front (MTF) unit,
+
+both implemented in SystemVerilog under hardware/pyflate/ and both simulated and
+passing (Icarus Verilog, iverilog -g2012):
+  - Huffman engine (bit_buffer.sv, huffman_decoder.sv, huffman_accel.sv,
+    tb_huffman.sv):  `TB PASS: decoded {0,2,1} == {0,2,1}`
+  - MTF unit        (mtf_unit.sv, tb_mtf.sv):  `TB PASS: MTF decoded {30,30,60}`
+Full writeup in hardware/pyflate/HARDWARE.md. Unlike the (archived) nbody PE,
+both designs are fully INTEGER - no floating point - and fully synthesizable as
+described. On-chip they chain directly (Huffman symbol stream -> MTF idx input),
+so the CPU is not in the loop between the two stages.
+
+Component (A) — bit-reader + Huffman decode engine:
 
   - Block diagram: AXI4-Lite MMIO control (CTRL/NSYM/STATUS/COUNT plus
     table-load registers) + a byte-stream DMA input feeding an 8-bit
@@ -199,6 +210,31 @@ point - and fully synthesizable as described.
     baseline. Assumption: canonical length-limited Huffman tables with
     MAXLEN<=15 (true for bzip2 by format), and that DMA can keep the FSM fed
     at line rate.
+
+Component (B) — MTF (Move-To-Front) unit:
+  - What/why: the bzip2 stage right after Huffman decode. In software,
+    `move_to_front(l, c)` rebuilt FOUR new list slices per decoded symbol
+    (`l[:] = l[c:c+1] + l[0:c] + l[c+1:]`) and is the profile's largest
+    allocation-churn hotspot (~10.3% of runtime, cProfile). It is the natural
+    next pipeline stage and a clean hardware structure, so it is our second
+    component.
+  - Architecture: `mtf_unit.sv` holds the current symbol alphabet in an N-entry
+    register file (N=256, W=8). Each clock it reads `tbl[idx]`, outputs it, and
+    moves that entry to the front (a conditional one-position shift of entries
+    0..idx-1). One symbol/clock, ZERO memory allocation — the direct hardware
+    analogue of the software OPT-2 in-place move-to-front.
+  - Inputs/outputs: MMIO/streamed alphabet load (ld_we/ld_addr/ld_data); index
+    stream in (in_valid/idx); decoded-symbol stream out (out_valid/sym). Integer,
+    fully synthesizable; target 300-600 MHz.
+  - HW/SW interface: same MMIO+DMA model as (A); on-chip the Huffman engine's
+    symbol stream drives this unit's `idx`, so (A)->(B) run as one pipeline with
+    no CPU in between. Output feeds the software RLE/inverse-BWT (next candidate
+    stage).
+  - Trade-offs: area = an N x W register file + N shift muxes (256 B + muxes) -
+    larger than the Huffman FSM but still small; the one-cycle 256-wide shift
+    sets timing (multi-cycle/banked shift trades latency for area if fmax is
+    tight).
+  - Verification: `TB PASS: MTF decoded {30,30,60} == {30,30,60}`.
 
 ESTIMATED OVERALL SPEEDUP (Amdahl's Law)
 --------------------------------------------------------------------------------
@@ -252,10 +288,24 @@ per-component speedup the hardware gives that fraction.
   only reaches 1/(1-f) = 1/0.5645 ~= 1.77x, and a deliberately pessimistic
   s=50 (e.g. dominated by DMA/handoff overhead) still gives ~1.74x. The
   estimate is therefore robust to the s assumption; it is capped by f, not by
-  s - the classic Amdahl's-Law lesson, and a concrete argument that a *second*
-  accelerator stage (e.g. offloading MTF or the inverse BWT too) would be the
-  next place to look for further overall speedup, since ~56% of total time
-  lies outside what this one accelerator touches.
+  s - the classic Amdahl's-Law lesson.
+
+  Adding the SECOND component (the MTF unit). That Amdahl ceiling is exactly why
+  we added component (B): the MTF stage (`move_to_front`) is another 10.3% of
+  runtime (cProfile self-time 3.70 s of 35.96 s), and it stays in software in
+  the single-accelerator estimate above. Offloading it too raises the covered
+  fraction to:
+      f_total = 43.55% (bit+Huffman) + 10.3% (MTF) = 53.8%
+  and, applying the SAME method to component (B): the MTF unit shifts one
+  symbol per clock, so at 500 MHz it runs at ~500,000,000 symbols/s; the
+  software move_to_front was called 92,803 times, ~1.81 s of the real 17.6 s
+  decode (~51,000 symbols/s), giving s_B ~= 500,000,000 / 51,000 ~= 9,800x.
+  With both components' per-stage speedups in the thousands, the covered
+  fraction dominates and the overall ceiling becomes:
+      overall ~= 1 / (1 - 0.538) ~= **2.16x**  (up from 1.77x with (A) alone).
+  The remaining ~46% (inverse-BWT, RLE, block control) now sets the new ceiling,
+  so the inverse-BWT is the logical THIRD stage - the same profile-then-offload
+  reasoning applied one level further.
 
 6. CONCLUSION
 --------------------------------------------------------------------------------
@@ -269,13 +319,16 @@ allocation-free move-to-front, and table-driven Huffman decode - preserved the
 decoder's output byte-for-byte (verified independently of the benchmark's own
 MD5 check) while delivering a measured 1.50x / ~33% speedup via the official
 `pyperf compare_to` protocol, well past the assignment's 7% bar. The proposed
-Huffman-decode accelerator is the natural hardware continuation: it takes the
-exact same two operations optimized in software (bit reading and Huffman
-symbol lookup) and moves them into a small, integer-only pipeline where "one
-symbol per few cycles" replaces "one symbol per dozens of Python bytecodes".
-Its own component-level speedup is enormous (~3,100x, by estimate), but
-Amdahl's Law caps the *overall* program benefit at ~1.77x, because the
-accelerated stage is only 43.55% of total runtime (measured via `cProfile` on
-the original decoder) - a result that is itself a useful finding: it argues
-for offloading a second stage (MTF or inverse BWT) as the next step, rather
-than over-investing in an already-near-optimal Huffman engine.
+hardware accelerator is the natural continuation of that same analysis: a
+TWO-COMPONENT, integer-only, fully-synthesizable design that offloads the two
+hottest, most hardware-friendly stages - (A) bit-reading + Huffman decode and
+(B) Move-To-Front - moving "one symbol per dozens of Python bytecodes" into
+"one symbol per clock" (both simulated: `decoded {0,2,1}` and `MTF {30,30,60}`).
+Component (A) alone is capped by Amdahl at ~1.77x (it touches 43.55% of runtime);
+adding (B) lifts the covered fraction to ~53.8% and the estimated overall
+ceiling to ~2.16x. The residual ~46% (inverse-BWT, RLE, control) then sets the
+next ceiling - so the inverse-BWT is the logical third stage. The through-line
+of the whole project: profile to find the real bottleneck, fix it in software,
+then push the largest, most regular, most hardware-friendly remainder into
+silicon - stage by stage, each justified by measured fractions rather than
+guesswork.

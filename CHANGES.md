@@ -30,8 +30,10 @@ software-only.**
   Element, `TB PASS: 5 pairs checked, 0 mismatches.`) was removed from the
   graded submission and moved to `_archive/hardware_nbody/` — kept intact for
   reference, not deleted.
-- **pyflate** keeps its hardware accelerator (Huffman decode engine,
-  `TB PASS: decoded {0,2,1} == {0,2,1}`).
+- **pyflate** keeps its hardware accelerator, now a **two-component** design:
+  (A) a bit-reader + Huffman decode engine (`TB PASS: decoded {0,2,1} == {0,2,1}`)
+  and (B) a Move-To-Front unit (`TB PASS: MTF decoded {30,30,60}`) — the "one or
+  two key components" the spec allows.
 - **Both benchmarks' software optimizations are unchanged** — already
   measured and reported: nbody 1.58×/36.5%, pyflate 1.50×/33.3%, both
   correctness-verified.
@@ -80,6 +82,12 @@ component; the hardware design's own estimate is ~60,000,000 symbols/s
 infinitely fast accelerator only reaches `1/(1-f) ≈ 1.77×` — so the estimate
 is robust to exactly how fast the FSM itself is. Full derivation, with the
 sensitivity check, is in `report_pyflate.txt` §5.
+
+**Two-component update.** That Amdahl ceiling motivated adding component (B),
+the MTF unit: the `move_to_front` stage is another ~10.3% of runtime, so
+offloading it too raises the covered fraction to ~53.8% and the estimated
+overall ceiling to **~2.16×** (up from 1.77× with the Huffman engine alone).
+The remaining ~46% (inverse-BWT, RLE, control) is the next stage to consider.
 
 ## Files touched
 

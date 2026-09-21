@@ -20,7 +20,7 @@ project/
 ├── scripts/
 │   ├── 00_setup.sh              # one-time environment setup (run inside the VM)
 │   ├── script_nbody.sh          # nbody: baseline → profile → optimize → compare
-│   └── script_pyflate.sh        # pyflate: baseline + copy VM source for optimizing
+│   └── script_pyflate.sh        # pyflate: setup → orig/opt run → compare → correctness
 ├── nbody/
 │   ├── nbody_original.py        # unmodified pyperformance nbody
 │   └── nbody_optimized.py       # optimized nbody (scalar-locals force loop)
@@ -33,8 +33,9 @@ project/
 │   └── opt/run_benchmark.py      # optimized version (buffered bit reader, in-place MTF,
 │                                  # table-driven Huffman decode)
 ├── hardware/                     # SystemVerilog accelerator proposal (simulated OK)
-│   └── pyflate/                  # canonical Huffman decode engine — the ONE accelerator
-│       ├── bit_buffer.sv  huffman_decoder.sv  huffman_accel.sv  tb_huffman.sv  HARDWARE.md
+│   └── pyflate/                  # two-component accelerator: Huffman engine + MTF unit
+│       ├── bit_buffer.sv  huffman_decoder.sv  huffman_accel.sv  tb_huffman.sv
+│       ├── mtf_unit.sv  tb_mtf.sv   HARDWARE.md
 ├── _archive/
 │   └── hardware_nbody/           # nbody's N-body PE design — not part of this submission's
 │                                  # graded HW deliverable, kept for reference (see CHANGES.md)
@@ -47,7 +48,7 @@ project/
 cd project
 bash scripts/00_setup.sh          # perf, python3-dbg, pyperf, pyperformance, FlameGraph
 bash scripts/script_nbody.sh      # produces results/nbody_compare.txt etc.
-bash scripts/script_pyflate.sh    # produces results/report_pyflate.txt + copies source
+bash scripts/script_pyflate.sh    # produces results/pyflate_compare.txt, flame graphs, correctness
 ```
 
 All work must run **inside the QEMU guest**, not on the host server.
@@ -113,25 +114,28 @@ Verified byte-for-byte identical output against `orig/` (MD5
 
 ## Hardware accelerator (SystemVerilog) — pyflate only
 
-`hardware/pyflate/`: a canonical Huffman decode engine (bit-buffer + zlib-style
-`code/first/index` FSM + table RAMs), integer-only and fully synthesizable,
-with an MMIO + streaming top. **Passes self-checking simulation**
-(Icarus Verilog `iverilog -g2012`): `TB PASS: decoded {0,2,1} == {0,2,1}`.
-`HARDWARE.md` has the block diagram, I/O table, register map, HW/SW interface,
-and area/power/perf trade-offs.
+`hardware/pyflate/` is a **two-component**, integer-only, fully-synthesizable
+accelerator for the two hottest, most hardware-friendly bzip2 stages
+(Huffman → MTF → RLE → inverse-BWT), both **passing self-checking simulation**
+(Icarus Verilog `iverilog -g2012`):
+- **(A) bit-reader + Huffman decode engine** (`bit_buffer.sv`, `huffman_decoder.sv`,
+  `huffman_accel.sv`, `tb_huffman.sv`): `TB PASS: decoded {0,2,1} == {0,2,1}`.
+- **(B) Move-To-Front unit** (`mtf_unit.sv`, `tb_mtf.sv`): `TB PASS: MTF decoded {30,30,60}`.
+On-chip they chain (Huffman symbol stream → MTF index), so the CPU isn't in the
+loop between stages. `HARDWARE.md` has both block diagrams, I/O tables, register
+map, HW/SW interface, and area/power/perf trade-offs.
 
 **Estimated overall speedup (Amdahl's Law).** The accelerator is a design
 proposal — per the spec, not synthesized or run — so its effect on *overall*
-program time is an estimate: `1 / ((1-f) + f/s)`. `f` (the fraction of total
-runtime the accelerator replaces) was derived rigorously with `cProfile` on
-the original decoder, bucketing self-time into bit-reading + Huffman-match
-functions vs. everything else (MTF/BWT/RLE/control flow stay in software
-either way): **f = 43.55%**. `s` (component-level hardware speedup), from the
-hardware's ~60M symbols/s vs. the software's measured ~19.3K symbols/s for
-that same component, is **~3,100×**. Result: **~1.77× estimated overall
-speedup** — and because `s` is so large, this is almost entirely set by `f`
-(even `s → ∞` only reaches 1.77×), so the estimate is robust to the exact `s`
-assumption. Full derivation in `report_pyflate.txt` §5.
+program time is an estimate: `1 / ((1-f) + f/s)`. `f` was derived rigorously
+with `cProfile` on the original decoder (self-time bucketing):
+- Component (A) covers **f = 43.55%** (bit-reading 27.70% + Huffman 15.85%); with
+  `s ≈ 3,100×` this alone gives **~1.77×** (and even `s → ∞` only reaches
+  `1/(1-f) ≈ 1.77×`, so it's robust to `s`).
+- Adding component (B), the MTF stage (**~10.3%** of runtime), raises the covered
+  fraction to **~53.8%** and the estimated overall ceiling to **~2.16×**.
+- The residual ~46% (inverse-BWT, RLE, control) sets the next ceiling → inverse-BWT
+  is the logical third stage. Full derivation in `report_pyflate.txt` §5.
 
 nbody's hardware proposal (a pipelined N-body Processing Element, one
 pair/clock, `TB PASS: 5 pairs checked, 0 mismatches.`) is not part of this
@@ -144,9 +148,9 @@ submission's graded hardware deliverable — see `_archive/hardware_nbody/`.
 | nbody   | 3.93s ± 0.38s  | 2.50s ± 0.22s  | **1.58×** | identical final energy (9 decimals) |
 | pyflate | 17.6s ± 1.3s   | 11.7s ± 0.9s   | **1.50×** | byte-identical output (MD5 match) |
 
-Plus, for pyflate only: an **estimated ~1.77× additional overall speedup**
-from the hardware accelerator (Amdahl's Law, `f`=43.55% measured, `s`≈3,100×
-assumed — see above).
+Plus, for pyflate only: an **estimated ~2.16× overall speedup** from the
+two-component hardware accelerator (Amdahl's Law: covered fraction ~53.8% =
+Huffman/bit 43.55% + MTF ~10.3%; component (A) alone ~1.77× — see above).
 
 Both software figures measured via the official `pyperf compare_to` protocol inside the course
 QEMU guest (see `results/nbody_compare.txt` and `results/pyflate_compare.txt`).

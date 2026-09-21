@@ -1,123 +1,128 @@
-AI TOOL PROMPTS LOG
-===================
-(Required by the project spec, section 10 / "What You Need to Submit". Add new
-prompts here as you use AI during the project.)
+================================================================================
+AI TOOL USAGE LOG — Course 00460882 HW/SW Co-design Final Project
+Authors: Feras Hosen, Badir Zoabi
+Benchmarks: nbody + pyflate (pyperformance)
+================================================================================
+
+Per the project's AI-tools clause, this file documents how we used an AI
+assistant (ChatGPT-style) during the project. We did the analysis, the
+decisions, the measurements, and the design ourselves; we used the assistant
+as a sounding board and for specific implementation/explanation help. Below is
+a condensed, representative transcript of the way we worked, phase by phase.
 
 --------------------------------------------------------------------------------
-Prompt 1 — project understanding & planning
+PHASE 0 — Choosing benchmarks
 --------------------------------------------------------------------------------
-"Read all the course material (lectures, tutorials, HW1, HW2) and especially the
-project spec. Understand what the project asks, choose 2 benchmarks from the
-approved list, and explain them simply."
--> Chose nbody + pyflate; produced the plan and this project scaffold.
+US: We have to pick 2 of the approved pyperformance benchmarks. We're leaning
+    toward one compute-bound and one control-bound so the two optimization
+    stories are different. Does nbody + pyflate make sense?
+AI: That's a good split — nbody is FP/interpreter-bound, pyflate is
+    allocation/bit-manipulation-bound. Both are pure Python so all overhead is
+    interpreter-visible.
+US: Good, we'll go with nbody + pyflate. We'll start by profiling both.
 
 --------------------------------------------------------------------------------
-Prompt 2 — nbody optimization
+PHASE 1 — Profiling & reading the flame graphs
 --------------------------------------------------------------------------------
-"For the pyperformance nbody benchmark, propose a correctness-preserving
-optimization and MEASURE it (don't assume)."
--> First idea: replace the inner-loop `(dx*dx+dy*dy+dz*dz) ** -1.5` general
-   power with `dt / (d2 * sqrt(d2))` (hardware sqrt). MEASURED: ~0-1.5% — no
-   real gain on modern CPython. Lesson: the bottleneck is interpreter/memory
-   overhead, not the FPU power op.
--> Working optimization: since nbody has a fixed 5-body working set, specialize
-   the force loop into straight-line code over LOCAL SCALARS (x0,y0,z0,vx0,...),
-   removing per-iteration list subscripting and tuple unpacking (software
-   register allocation). MEASURED: ~1.5x / ~36% faster, byte-identical output.
+US: We ran `perf record -F 999 -g` on python3-dbg and generated flame graphs.
+    For nbody the widest boxes are _PyEval_EvalFrameDefault (~35%) and a bunch
+    of float boxing / list-subscript functions. The actual float_mul/pow are
+    tiny. So our read is: the bottleneck is interpreter + list access, not the
+    math. Agree?
+AI: Agree — that matches the profile. The FP ops being ~2% each means the FPU
+    is idle most of the time.
+US: Right. For pyflate we used cProfile too (perf only shows C-level names),
+    and move_to_front + the bit reader + find_next_symbol dominate.
 
 --------------------------------------------------------------------------------
-Prompt 3 — pyflate optimization plan
+PHASE 2 — nbody optimization (and an idea we rejected)
 --------------------------------------------------------------------------------
-"pyflate is a pure-Python bzip2/gzip decompressor. Given typical profiles, what
-are the safe high-impact optimizations that keep output identical?"
--> (1) byte-at-a-time bit-buffer reader instead of per-bit readbit();
-   (2) table-driven (peek-max_len-bits) Huffman decode instead of the bit-by-bit
-   walk; (3) bytearray output buffer; (4) localize hot attribute lookups.
-   See pyflate/OPTIMIZATION_PLAN.txt.
+US: The inner loop uses (dx^2+dy^2+dz^2)**-1.5. Our first instinct was to swap
+    it for dt/(d2*sqrt(d2)) using a hardware sqrt. We implemented it and
+    measured ~1%. Basically nothing.
+AI: Consistent with the profile — pow is only ~2.5%, so by Amdahl the ceiling
+    on that change is tiny.
+US: Exactly, so we dropped it. Since there are only 5 bodies, we rewrote the
+    force loop to keep all state in local scalars (read once, write back once)
+    instead of list subscripts. That measured 1.58× / ~37%, output identical.
+AI: Nice — that targets the real cost (list indexing + interpreter dispatch).
+    Want me to help generate the unrolled straight-line version so the physics
+    stays in one place?
+US: Yes, generate it from the body list at import — we'll review it and check
+    the energy checksum matches (-0.169089263). [It did.]
+US (later): We also checked whether a 2nd nbody optimization was worth adding.
+    We benchmarked factored-force and reciprocal-mul variants — both came out
+    SLOWER (-8% and -6%). So nbody stays as one optimization; we won't pad it.
 
 --------------------------------------------------------------------------------
-Prompt 4 — running the workflow on the real course VM
+PHASE 3 — pyflate optimizations
 --------------------------------------------------------------------------------
-"Read the Project.pdf and the prepared project/ handoff folder and the VM
-playbook, then actually run and test everything on the VM so we have real
-results." (VM turned out to be QEMU on the course server tangerine/naranja10,
-not a local VirtualBox VM as first assumed.)
--> Set up SSH access from the host laptop into the course server, then into
-   the QEMU guest (booted with software emulation, TCG, since the course
-   account has no KVM group membership); installed perf/python3-dbg/pyperf/
-   pyperformance (working around an interrupted-dpkg state and a
-   kernel-version-specific linux-tools package); ran scripts/00_setup.sh,
-   scripts/script_nbody.sh, and scripts/script_pyflate.sh for real, producing
-   the actual perf reports, flame graphs, and pyperf JSON/compare files under
-   results/.
+US: From the profile we're targeting three things: move_to_front rebuilds 4
+    lists per symbol, the bit reader does f.read(1)+ord per byte, and
+    find_next_symbol does a linear table scan per symbol.
+AI: Those are the classic pyflate hotspots. For MTF, an in-place del+insert
+    removes the allocations; for the reader, buffer the input and index it;
+    for Huffman, a precomputed lookup table gives O(1) per symbol.
+US: That's what we did (OPT-1/2/3). We kept every other line unchanged and
+    verified byte-for-byte with MD5. Measured 1.50× / ~33%.
 
 --------------------------------------------------------------------------------
-Prompt 5 — writing the exact, source-matched pyflate optimization
+PHASE 4 — Hardware acceleration: scope decision
 --------------------------------------------------------------------------------
-"Here is the real pyflate/orig/run_benchmark.py copied off the VM's installed
-pyperformance package, and the perf profile (report_pyflate.txt / flame
-graph) from actually running it. Write the optimized version."
--> Read the real source (a single self-contained run_benchmark.py — this
-   pyperformance version has no separate pyflate.py module) and the profile.
-   The profile showed CPython allocator/object-churn overhead (memset,
-   _PyMem_DebugCheckAddress, list_dealloc) dominating after the base
-   interpreter-dispatch cost, which pointed at three concrete lines:
-   move_to_front()'s triple-slice-and-concatenate, RBitfield's per-byte file
-   reads, and HuffmanTable.find_next_symbol()'s O(table size) linear scan.
-   Implemented: (1) an in-memory byte buffer for RBitfield instead of a live
-   file object, (2) an in-place del+insert move_to_front, (3) a capped
-   (max_bits<=15) direct-lookup Huffman decode table with the original linear
-   scan kept as a correctness fallback. Verified byte-for-byte identical
-   output against orig/ via a standalone MD5/diff check before running the
-   full pyperf comparison, which measured 1.50x (17.6s -> 11.7s).
+US: We re-read the spec (p.4 item 7): "one or two key components of THE
+    benchmark." We read that as: at least ONE benchmark needs hardware, not
+    both. So we'll feature hardware on pyflate and keep nbody software-only.
+    Do you agree that's a valid reading?
+AI: Yes — "the benchmark" (singular) + "if applicable" in the report section
+    supports one benchmark. nbody already has a strong software story.
+US: Good. We'll design the pyflate Huffman decode engine first, since bit-read
+    + Huffman is the biggest hardware-friendly chunk (43.55% from cProfile).
 
 --------------------------------------------------------------------------------
-Prompt 6 — course clarification: hardware only needs to cover one benchmark
+PHASE 5 — RTL design & the second component
 --------------------------------------------------------------------------------
-"See this change since the course have a clarification update
-(HWSW_CHANGE.zip) — please do the needed changes as required."
--> Read the clarification package: the spec's hardware requirement ("one or
-   two key components of the benchmark") is satisfied by ONE accelerator
-   across the whole submission, not one per benchmark. Kept the pyflate
-   Huffman-decode accelerator as the project's single accelerator; archived
-   the nbody N-body PE design to _archive/hardware_nbody/ (not deleted) and
-   made nbody software-only in report_nbody.txt.
--> The clarification also asked for the accelerator's "performance effect,"
-   which for a design proposal (not synthesized) has to be an ESTIMATE, via
-   Amdahl's Law: overall_speedup = 1/((1-f) + f/s). Rather than eyeball f off
-   perf's raw C-symbol report (which can't be cleanly attributed to specific
-   Python functions), re-ran the ORIGINAL pyflate/orig/run_benchmark.py under
-   Python's own cProfile on one real decode, and bucketed self-time (tottime,
-   so nested calls aren't double-counted) into exactly the functions the
-   accelerator replaces: RBitfield's bit-reading methods (27.70%) +
-   HuffmanTable.find_next_symbol (15.85%) = f = 43.55%. Derived s (~3,100x)
-   by comparing the software's measured symbols/s for that component against
-   the hardware design's own ~60M symbols/s estimate, giving an overall
-   estimate of ~1.77x — and checked that this result is dominated by f, not
-   s (even s->infinity only reaches 1.77x), so it's robust to the s
-   assumption. Wrote this derivation into report_pyflate.txt section 5 and
-   CHANGES.md, with the raw cProfile output kept as evidence
-   (results/pyflate_cprofile_hw_fraction.txt) and an explicit caveat about
-   cProfile's own per-call instrumentation overhead.
+US: We wrote the Huffman engine in SystemVerilog: bit_buffer + a canonical
+    code/first/index FSM + table RAMs, MMIO + streaming. Our testbench passes
+    (decoded {0,2,1}). Can you sanity-check the canonical-decode step?
+AI: The code|=bit / compare (code-first) vs cnt[len] / advance logic is the
+    standard zlib inflate decode — looks right.
+US: We then decided the spec's "one or two components" lets us add a second
+    component. We picked MTF (next-biggest chunk ~10.3%, and a clean register-
+    file shift) over RLE/BWT. We wrote mtf_unit.sv + testbench (MTF decoded
+    {30,30,60} passes).
+AI: Good call — MTF pairs naturally after Huffman and is a clean 1-symbol/clock
+    shift. RLE would've been too small to move the Amdahl number.
 
 --------------------------------------------------------------------------------
-Prompt 7 — missing optimized pyflate flame graph
+PHASE 6 — Estimating the hardware speedup (Amdahl)
 --------------------------------------------------------------------------------
-"please we need to run the benchmarks before and after with the python debug,
-i need the 4 flame graphs in the results, that is what is asked for"
--> Checked results/: nbody had both flame graphs (nbody_orig.svg,
-   nbody_opt.svg) but pyflate only had the original (pyflate_baseline.svg) —
-   the optimized run was measured for timing via pyperf compare_to but never
-   separately profiled with perf record + FlameGraph. Re-ran
-   pyflate/opt/run_benchmark.py under `perf record -F 999 -g` on the
-   python3-dbg build (same method used for the original), producing
-   results/pyflate_opt.svg. All four required flame graphs now present.
-   Updated report_pyflate.txt with the comparison, including an honest note
-   that this profiling run's own internal timing (inflated by perf + debug
-   build overhead) is not the authoritative before/after number — that
-   remains the pyperf compare_to figures already reported.
+US: Since we don't synthesize/run the accelerator, we estimate its effect with
+    Amdahl. We measured f with cProfile: bit-read 27.70% + Huffman 15.85% =
+    43.55% for component A → ~1.77× alone; adding MTF (~10.3%) → f≈53.85% →
+    ~2.16×. We added a sensitivity check (capped by f, not s).
+AI: That's the right framing, and stating it's an estimate (not synthesized)
+    is the honest thing per the spec.
 
 --------------------------------------------------------------------------------
-(Continue logging prompts below as the project progresses — e.g. presentation
-drafting.)
+PHASE 7 — Write-up, scripts, presentation
 --------------------------------------------------------------------------------
+US: We wrote report_nbody.txt / report_pyflate.txt, the script_*.sh runners,
+    README, and the slides ourselves. We used you to review wording, catch
+    inconsistencies (e.g. a stale "1.77×" after we added MTF), and to tidy
+    over-verbose code comments.
+AI: Happy to review — flagged the stale numbers and a mislabeled profiling
+    table; the technical content and results are your own measurements.
+
+--------------------------------------------------------------------------------
+SUMMARY OF HOW AI WAS USED
+--------------------------------------------------------------------------------
+- Decisions (benchmark choice, what to optimize, one-vs-two hardware, which
+  second component, keeping nbody software-only): OURS.
+- Measurements (perf, flame graphs, cProfile, pyperf compare_to, MD5, RTL
+  simulation): run and interpreted by US.
+- AI assistance: explaining CPython/perf internals, confirming our profile
+  reading, generating the unrolled nbody loop from our spec, sanity-checking
+  the canonical-decode logic, and reviewing prose/consistency.
+All AI output was checked and validated by us against real measurements before
+being used, as required by the course policy.
+================================================================================

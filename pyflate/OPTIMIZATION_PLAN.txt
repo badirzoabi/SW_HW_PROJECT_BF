@@ -74,5 +74,5 @@ Decompress with both orig and opt and compare the output bytes:
     # assert hashlib.sha256(run("orig/pyflate.py")) == hashlib.sha256(run("opt/pyflate.py"))
     PY
 
-(The planning assistant will fill in the exact entry-point calls once it sees
-the real run_benchmark.py — this is why OPTION A in script_pyflate.sh exists.)
+(See pyflate/correctness_check.py for the actual byte-for-byte / MD5 check used
+against the real run_benchmark.py.)

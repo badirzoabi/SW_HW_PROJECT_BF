@@ -1,47 +1,18 @@
-# n-body benchmark — OPTIMIZED
+# n-body benchmark — OPTIMIZED. Same simulation, identical output (9 decimals).
 #
-# SAME simulation, SAME output (identical to 9 decimals) as nbody_original.py.
-#
-# WHAT CHANGED
-# ------------
-# The original inner loop stores every body's position/velocity in Python
-# LISTS and re-unpacks them from a tuple of pairs on every iteration:
-#
-#     for (((x1,y1,z1), v1, m1), ((x2,y2,z2), v2, m2)) in PAIRS:
-#         ...
-#         v1[0] -= dx*b2m ;  v1[1] -= dy*b2m ; ...   # list subscript writes
-#
-# Every `v1[0] -= ...` is a BINARY_SUBSCR + STORE_SUBSCR (a hashless list index
-# with bounds checks), and every pair iteration re-runs a nested tuple/list
-# UNPACK. For the dominant force loop that is dozens of extra bytecodes per pair.
-#
-# The n-body problem here has a FIXED, TINY working set (5 bodies). So we
-# specialize the force loop into STRAIGHT-LINE CODE over LOCAL SCALARS
-# (x0,y0,z0,vx0,...). Local variables use LOAD_FAST/STORE_FAST (array-indexed
-# C slots) instead of subscripting Python list objects, and there is no
-# per-iteration unpacking. State is read from the body lists once at entry and
-# written back once at exit.
-#
-# WHY IT'S FASTER (hardware/software reasoning for the report)
-# ------------------------------------------------------------
-# This is the software analogue of register allocation: we hold the small hot
-# working set in fast "registers" (CPython local slots) instead of chasing
-# pointers into list objects on the heap every operation. It removes memory
-# indirection and interpreter dispatch overhead from the inner loop — echoing
-# the course theme that pointer/among-object access is the enemy and keeping the
-# working set close to the compute unit is the win. Measured ~1.5x (>=30%)
-# faster in pure CPython, with byte-identical results. (Note: swapping the
-# `** -1.5` power for a hardware sqrt was tried and made ~no difference on
-# modern CPython — the bottleneck is interpreter/memory overhead, not the FPU.)
-#
-# The straight-line force loop is GENERATED from SYSTEM at import time (see
-# _build_advance) so the physics stays in one place and is easy to audit.
-#
-# Run modes: identical to nbody_original.py (NBODY_VERIFY / NBODY_PROFILE).
+# Change: the original stores body state in Python LISTS and re-unpacks a tuple
+# of pairs each iteration, so the hot loop pays list-subscript + unpack overhead
+# (which the profile shows dominates — not the FP math). Since there are only
+# 5 bodies, we specialize the force loop into straight-line code over LOCAL
+# SCALARS (LOAD_FAST/STORE_FAST), read from the lists once and written back once
+# — software "register allocation". Measured ~1.5x / ~37% faster, same output.
+# (A hardware-sqrt swap was tried and gave ~0% — the FPU isn't the bottleneck.)
+# The straight-line advance() is generated from SYSTEM at import (_build_advance).
+# Run-modes identical to nbody_original.py.
 
 import os
 import sys
-from math import sqrt  # noqa: F401  (kept for parity / experiments)
+from math import sqrt  # noqa: F401
 
 
 def combinations(l):

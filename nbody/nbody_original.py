@@ -1,21 +1,11 @@
-# n-body benchmark — ORIGINAL (unmodified pyperformance version)
-#
-# This is the canonical pyperformance `bm_nbody` implementation.
-# It simulates the gravitational interaction of the Sun + 4 gas giants
-# (Jupiter, Saturn, Uranus, Neptune) by integrating their motion with a
-# simple symplectic-Euler step.
-#
-# Run modes (dispatched via environment variables so we don't fight pyperf argv):
-#   (default)          -> pyperf benchmark harness (use: python3 nbody_original.py -o out.json)
-#   NBODY_VERIFY=1     -> print final energy to 9 decimals and exit (correctness check)
-#   NBODY_PROFILE=1    -> run a fixed heavy loop (for `perf record` flame graphs)
+# n-body benchmark — ORIGINAL (unmodified pyperformance bm_nbody).
+# Sun + 4 gas giants, O(N^2) pairwise gravity, 20,000 steps.
+# Env run-modes: NBODY_VERIFY=1 (print final energy) / NBODY_PROFILE=1 (heavy
+# loop for perf). Default = pyperf harness (imported lazily in __main__).
 
 import os
 import sys
 from math import sqrt
-
-# pyperf is only needed for the benchmarking harness; imported lazily in
-# __main__ so the NBODY_VERIFY / NBODY_PROFILE modes run without it.
 
 
 def combinations(l):

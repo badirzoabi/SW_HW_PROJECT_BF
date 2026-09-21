@@ -1,88 +1,58 @@
-// ============================================================================
-// huffman_decoder.sv  —  Canonical (length-limited) Huffman decoder.
-//
-// Implements the standard zlib/inflate canonical decode, one bit per cycle:
-//
-//   code=0; first=0; index=0;
-//   for (len=1..MAXLEN) {
-//       code |= getbit();                       // add next bit (LSB)
-//       count = cnt[len];
-//       if (code - first < count)               // symbol found at this length
-//           return symbol[index + (code-first)];
-//       index += count;
-//       first  = (first + count) << 1;
-//       code <<= 1;
-//   }
-//
-// Tables (loaded once per Huffman table via the tl_* port):
-//   cnt[len]      : number of codes of each length          (canonical lengths)
-//   symbol[k]     : symbols sorted by (length, symbol value) (the code alphabet)
-//
-// Throughput: ~1 bit/cycle => ~1/(avg code length) symbols/cycle. Still orders
-// of magnitude faster than the pure-Python bit-by-bit decode. A lookup-table
-// front-end (peek MAXLEN bits, index a 2^MAXLEN table) reaches 1 symbol/cycle
-// at the cost of table memory — see HARDWARE.md trade-offs.
-// ============================================================================
+// huffman_decoder.sv — canonical (zlib-style) Huffman decoder, 1 bit/clock.
+// Per bit: code|=bit; if (code-first) < cnt[len] -> emit symbol[index+(code-first)]
+//          else advance: index+=cnt; first=(first+cnt)<<1; code<<=1; len++.
+// Tables cnt[len] and symbol[] are loaded once per block via the tl_* port.
 module huffman_decoder #(
     parameter int MAXLEN = 15,        // max code length
-    parameter int SYMW   = 9,         // symbol width (bits)
+    parameter int SYMW   = 9,         // symbol width
     parameter int MAXSYM = 512        // symbol table depth
 ) (
     input  logic              clk,
     input  logic              rst_n,
-
-    // ---- table load ----
+    // table load
     input  logic              tl_we,
-    input  logic              tl_is_sym,     // 1 = write symbol[], 0 = write cnt[]
-    input  logic [8:0]        tl_addr,       // cnt: 1..MAXLEN ; sym: 0..MAXSYM-1
+    input  logic              tl_is_sym,     // 1=symbol[], 0=cnt[]
+    input  logic [8:0]        tl_addr,
     input  logic [15:0]       tl_data,
-
-    // ---- control ----
-    input  logic              start,         // 1-cycle pulse to begin
-    input  logic [31:0]       nsym,          // number of symbols to decode
+    // control
+    input  logic              start,         // 1-cycle pulse
+    input  logic [31:0]       nsym,
     output logic              busy,
     output logic              done,
-
-    // ---- bit source (bit_buffer) ----
+    // bit source (bit_buffer)
     input  logic              bit_in,
     input  logic              bit_valid,
     output logic              bit_take,
-
-    // ---- symbol output stream ----
+    // symbol output stream
     output logic [SYMW-1:0]   osym,
     output logic              osym_valid,
     input  logic              osym_ready
 );
-    // ---- tables ----
-    logic [15:0]     cnt_mem [0:MAXLEN];   // index 1..MAXLEN used (0 unused)
+    logic [15:0]     cnt_mem [0:MAXLEN];   // cnt[1..MAXLEN]
     logic [SYMW-1:0] sym_mem [0:MAXSYM-1];
 
     always_ff @(posedge clk) begin
         if (tl_we) begin
-            if (tl_is_sym) sym_mem[tl_addr]        <= tl_data[SYMW-1:0];
-            else           cnt_mem[tl_addr[3:0]]   <= tl_data;   // len 1..MAXLEN
+            if (tl_is_sym) sym_mem[tl_addr]      <= tl_data[SYMW-1:0];
+            else           cnt_mem[tl_addr[3:0]] <= tl_data;
         end
     end
 
-    // ---- FSM ----
     typedef enum logic [1:0] {S_IDLE, S_DEC, S_EMIT, S_DONE} state_t;
     state_t state;
 
     logic [19:0] code, first;
-    logic [15:0] index;         // running symbol base
-    logic [4:0]  len;           // 1..MAXLEN
-    logic [31:0] dcount;        // symbols decoded so far
+    logic [15:0] index;
+    logic [4:0]  len;
+    logic [31:0] dcount;
     logic [SYMW-1:0] sym_reg;
 
-    // combinational decode test for the current bit
-    logic [19:0] code_v;
-    logic [15:0] cnt_v;
-    logic [19:0] diff_v;
+    // per-bit decode test (combinational)
+    logic [19:0] code_v, diff_v;
+    logic [15:0] cnt_v, symaddr_v;
     logic        found_v;
-    logic [15:0] symaddr_v;
-
     always_comb begin
-        code_v    = code | {19'b0, bit_in};        // add next bit as LSB
+        code_v    = code | {19'b0, bit_in};
         cnt_v     = cnt_mem[len];
         diff_v    = code_v - first;
         found_v   = (diff_v < {4'b0, cnt_v});
@@ -91,7 +61,7 @@ module huffman_decoder #(
 
     assign busy       = (state == S_DEC) || (state == S_EMIT);
     assign done       = (state == S_DONE);
-    assign bit_take   = (state == S_DEC) && bit_valid;   // consume one bit/iter
+    assign bit_take   = (state == S_DEC) && bit_valid;
     assign osym       = sym_reg;
     assign osym_valid = (state == S_EMIT);
 
@@ -113,28 +83,24 @@ module huffman_decoder #(
                     if (found_v) begin
                         sym_reg <= sym_mem[symaddr_v];
                         state   <= S_EMIT;
-                    end else begin
+                    end else begin                 // advance to next length
                         index <= index + cnt_v;
                         first <= (first + {4'b0, cnt_v}) << 1;
                         code  <= code_v << 1;
                         len   <= len + 5'd1;
-                        // (len is guaranteed <= MAXLEN for valid streams)
                     end
                 end
 
                 S_EMIT: if (osym_ready) begin
-                    if (dcount + 1 == nsym) begin
-                        dcount <= dcount + 1;
-                        state  <= S_DONE;
-                    end else begin
-                        dcount <= dcount + 1;
-                        // restart canonical walk for the next symbol
+                    dcount <= dcount + 1;
+                    if (dcount + 1 == nsym) state <= S_DONE;
+                    else begin                     // restart for next symbol
                         code <= '0; first <= '0; index <= '0; len <= 5'd1;
                         state <= S_DEC;
                     end
                 end
 
-                S_DONE: state <= S_IDLE;   // ready for next block
+                S_DONE: state <= S_IDLE;
                 default: state <= S_IDLE;
             endcase
         end

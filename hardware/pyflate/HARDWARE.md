@@ -105,3 +105,58 @@ Simulate:
 iverilog -g2012 -o sim bit_buffer.sv huffman_decoder.sv tb_huffman.sv && vvp sim
 # expect: "TB PASS: decoded {0,2,1} == {0,2,1}"
 ```
+
+---
+
+# Second-stage accelerator: MTF (Move-To-Front) unit
+
+## Why a second component
+Amdahl caps the Huffman/bit accelerator (f = 43.55%) at ~1.77x overall. The next
+biggest software hotspot is `move_to_front` (~10.3% of runtime, cProfile) — the
+bzip2 stage right after Huffman decode. Accelerating it too raises the covered
+fraction to ~53.8% and the estimated overall ceiling to ~2.16x (1/(1-0.538)).
+It is the natural next stage of the pipeline (Huffman -> MTF -> RLE -> inverse-BWT).
+
+## What it does / how it works
+`mtf_unit.sv` holds the current symbol alphabet in a small register file
+(`tbl[0..N-1]`). Each clock it takes an index `idx`, outputs `tbl[idx]`, and moves
+that symbol to the front (shifting entries 0..idx-1 down by one) — exactly
+software `move_to_front(l, c)`, but with zero list allocation and one symbol/clock.
+```
+software (per symbol):  l[:] = l[c:c+1] + l[0:c] + l[c+1:]   (4 new lists)
+hardware (per clock) :  sym = tbl[idx]; shift tbl[0..idx]; tbl[0] = sym
+```
+
+## Interface / I/O
+| Port | Width | Dir | Meaning |
+|---|---|---|---|
+| ld_we, ld_addr, ld_data | 1/AW/W | in | load the alphabet once per block |
+| in_valid, idx | 1/AW | in | present an MTF index |
+| out_valid, sym | 1/W | out | decoded symbol (1 cycle later) |
+Parameters: N=256 (alphabet), W=8 (symbol). Integer-only, fully synthesizable.
+
+## Architecture / trade-offs
+- Datapath: N-entry register file with a conditional 1-position shift (each entry
+  loads its own or its neighbor's value, gated by i<=idx). Throughput 1 sym/clock.
+- Area: N x W register file + N shift muxes (256B + muxes). Bigger than the
+  Huffman FSM but still small; the one-cycle 256-wide shift sets timing (a
+  multi-cycle or banked shift trades latency for area if fmax is tight).
+- Power: dominated by the register-file shift; energy/symbol far below the Python
+  list-rebuild it replaces.
+
+## HW/SW interface
+Same model as the Huffman engine: MMIO loads the alphabet, DMA streams indices in
+and symbols out. On-chip the Huffman engine's symbol stream feeds this unit's idx
+input directly (Huffman -> MTF), and MTF output feeds the software RLE/inverse-BWT
+(or a future stage).
+
+## Verification
+```
+iverilog -g2012 -o sim mtf_unit.sv tb_mtf.sv && vvp sim
+# expect: "TB PASS: MTF decoded {30,30,60} == {30,30,60}"
+```
+
+## Combined estimate (two components)
+Huffman+bit (43.55%) + MTF (~10.3%) ≈ 53.8% offloaded -> Amdahl overall ceiling
+≈ 1/(1-0.538) ≈ 2.16x (up from ~1.77x with the Huffman engine alone). The
+remaining ~46% (inverse-BWT, RLE, control) is the next target.
